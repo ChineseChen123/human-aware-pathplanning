@@ -1,0 +1,10 @@
+# Shared defaults, loaded automatically for every scenario regardless of the
+# working directory. Scenario defaults and individual agent fields can override
+# these values. Existing recordings retain their resolved settings.
+defaults:
+  # Patient pedestrians attempt rerouting on this blocked movement attempt.
+  wait_threshold: 2
+
+# Shared simulation settings may be added here. Scenario simulation settings
+# take precedence, followed by command-line overrides.
+simulation: {}

@@ -1,0 +1,44 @@
+name: Short crowded route or long quiet route
+map: |
+  #####################
+  #...................#
+  #...................#
+  #...................#
+  #...#############...#
+  #...#############...#
+  #...#############...#
+  #...................#
+  #...................#
+  #...................#
+  #####################
+robot:
+  start: [1, 3]
+  goal: [19, 3]
+defaults:
+  behavior: patient
+  personal_radius: 2.5
+pedestrians:
+  - id: stream_a
+    start: [18, 3]
+    goal: [2, 3]
+  - id: stream_b
+    start: [17, 2]
+    goal: [3, 2]
+    move_interval: 2
+  - id: stream_c
+    start: [16, 1]
+    goal: [4, 1]
+    spawn_time: 1
+  - id: stream_d
+    start: [19, 2]
+    goal: [1, 2]
+    spawn_time: 3
+  - id: stream_e
+    start: [15, 3]
+    goal: [5, 3]
+    spawn_time: 2
+simulation:
+  max_steps: 100
+  search_horizon: 50
+  prediction_steps: 5
+

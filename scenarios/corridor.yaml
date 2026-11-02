@@ -1,0 +1,32 @@
+name: Narrow corridor and passing bay
+map: |
+  #####################
+  #...................#
+  #.#################.#
+  #.#######...#######.#
+  #...................#
+  #########...#########
+  #####################
+robot:
+  start: [1, 4]
+  goal: [19, 4]
+defaults:
+  behavior: patient
+  personal_radius: 2.0
+pedestrians:
+  - id: opposing_a
+    start: [19, 4]
+    goal: [1, 4]
+  - id: opposing_b
+    start: [18, 4]
+    goal: [2, 4]
+    spawn_time: 2
+  - id: opposing_c
+    start: [19, 3]
+    goal: [1, 3]
+    spawn_time: 4
+simulation:
+  max_steps: 100
+  search_horizon: 45
+  prediction_steps: 5
+

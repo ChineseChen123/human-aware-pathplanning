@@ -1,0 +1,55 @@
+name: Crossing intersection
+# Coordinates are [column, row], starting at [0, 0] in the top-left.
+map: |
+  #####################
+  #########...#########
+  #########...#########
+  #########...#########
+  #########...#########
+  #...................#
+  #...................#
+  #...................#
+  #########...#########
+  #########...#########
+  #########...#########
+  #########...#########
+  #####################
+robot:
+  start: [1, 6]
+  goal: [19, 6]
+defaults:
+  behavior: patient
+  move_interval: 1
+  personal_radius: 2.0
+  direction_order: NESW
+pedestrians:
+  - id: north
+    start: [10, 1]
+    goal: [10, 11]
+  - id: south
+    start: [9, 11]
+    goal: [9, 1]
+    spawn_time: 2
+  - id: east
+    start: [19, 5]
+    goal: [1, 5]
+  - id: west
+    start: [1, 7]
+    goal: [19, 7]
+    spawn_time: 3
+  - id: north_late
+    start: [11, 2]
+    goal: [11, 10]
+    spawn_time: 4
+simulation:
+  max_steps: 100
+  search_horizon: 45
+  max_expansions: 15000
+  prediction_steps: 5
+  alpha: 1.0
+  beta: 3.0
+  gamma: 4.0
+  fairness_weight: 0.25
+  seconds_per_step: 0.35
+  seed: 0
+

@@ -1,0 +1,45 @@
+name: Open room with crossing flows
+map: |
+  #####################
+  #...................#
+  #...................#
+  #...................#
+  #...................#
+  #...................#
+  #...................#
+  #...................#
+  #...................#
+  #...................#
+  #...................#
+  #...................#
+  #####################
+robot:
+  start: [1, 6]
+  goal: [19, 6]
+defaults:
+  behavior: patient
+  personal_radius: 2.0
+pedestrians:
+  - id: down_a
+    start: [6, 1]
+    goal: [6, 11]
+  - id: down_b
+    start: [10, 1]
+    goal: [10, 11]
+    spawn_time: 2
+  - id: up_a
+    start: [13, 11]
+    goal: [13, 1]
+  - id: diagonal
+    start: [18, 2]
+    waypoints: [[10, 6]]
+    goal: [2, 10]
+    direction_order: WNES
+  - id: across
+    start: [19, 7]
+    goal: [1, 7]
+    move_interval: 2
+simulation:
+  max_steps: 100
+  search_horizon: 45
+  prediction_steps: 5

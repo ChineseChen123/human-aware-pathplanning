@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "human-aware-navigation"
+version = "0.1.0"
+description = "Editable, reproducible pedestrian and robot navigation experiments"
+requires-python = ">=3.10"
+dependencies = ["pygame-ce>=2.5.3,<3", "PyYAML>=6.0.2,<7", "matplotlib>=3.9,<4"]
+
+[project.optional-dependencies]
+dev = ["pytest>=8,<10", "ruff>=0.11,<1"]
+
+[project.scripts]
+human-nav = "human_nav.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["human_nav*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+extend-exclude = [".python", ".uv-cache", "results"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I"]
+

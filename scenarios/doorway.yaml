@@ -1,0 +1,39 @@
+name: Shared doorway bottleneck
+map: |
+  #####################
+  #.........#.........#
+  #.........#.........#
+  #.........#.........#
+  #.........#.........#
+  #...................#
+  #.........#.........#
+  #.........#.........#
+  #.........#.........#
+  #.........#.........#
+  #####################
+robot:
+  start: [2, 5]
+  goal: [18, 5]
+defaults:
+  behavior: patient
+  personal_radius: 2.5
+pedestrians:
+  - id: entering_a
+    start: [18, 4]
+    goal: [2, 4]
+  - id: entering_b
+    start: [18, 6]
+    goal: [2, 6]
+    spawn_time: 1
+  - id: near_door
+    start: [12, 5]
+    goal: [8, 5]
+  - id: leaving
+    start: [3, 8]
+    goal: [17, 8]
+    spawn_time: 3
+simulation:
+  max_steps: 100
+  search_horizon: 45
+  prediction_steps: 5
+
