@@ -109,6 +109,7 @@ class Simulation:
         self.tick = 0
         self.space_exposure = 0.0
         self.minimum_distance: float | None = None
+        self.robot_plans: list[dict] = []
         self.planner: RobotPlanner | None = None
         if include_robot:
             from .planners import RobotPlanner
@@ -217,6 +218,7 @@ class Simulation:
         }
         occupied = set(positions.values())
         proposals = {}
+        decision = None
         # Forecast before updating any human route memories for this timestep.
         robot_id = self.scenario.robot.id
         if robot_id in positions and self.planner is not None:
@@ -224,6 +226,15 @@ class Simulation:
             proposals[robot_id] = (
                 self.planner.choose_move(self) if robot.eligible(self.tick) else positions[robot_id]
             )
+            if self.record and robot.eligible(self.tick):
+                decision = {
+                    "tick": self.tick,
+                    "sequence": self.planner.stats.calls,
+                    "path": [list(p) for p in self.planner.last_path],
+                    "goal": list(robot.goal),
+                    "status": self.planner.last_status,
+                    "cost": self.planner.last_cost,
+                }
         for ident, p in positions.items():
             agent = self.agents[ident]
             if ident == self.scenario.robot.id and self.planner is not None:
@@ -235,6 +246,10 @@ class Simulation:
             if not self.scenario.grid.walkable(p) or manhattan(positions[ident], p) > 1:
                 raise RuntimeError(f"Illegal proposal by {ident}: {p}")
         executed = resolve_moves(positions, proposals, self.priority())
+        if decision is not None:
+            decision["proposed"] = list(proposals[robot_id])
+            decision["executed"] = list(executed[robot_id])
+            self.robot_plans.append(decision)
 
         # Left-endpoint sampling: one exposure sample per simulated interval,
         # using actual discrete positions, including an agent's final interval.

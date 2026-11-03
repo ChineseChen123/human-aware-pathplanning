@@ -118,6 +118,7 @@ def make_replay(simulation: Simulation, baseline: Simulation, metrics: dict) -> 
         "metrics": metrics,
         "frames": simulation.history,
         "baseline_frames": baseline.history,
+        "robot_plans": simulation.robot_plans,
     }
 
 

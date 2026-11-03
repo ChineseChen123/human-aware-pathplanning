@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import os
+from bisect import bisect_right
 from pathlib import Path
+from time import perf_counter
 
 os.environ.setdefault("PYGAME_HIDE_SUPPORT_PROMPT", "1")
 
@@ -19,6 +21,8 @@ GRID_LINE = (223, 231, 237)
 WALL = (62, 79, 97)
 BLUE = (47, 102, 224)
 GREEN = (27, 139, 112)
+PLAN_COLOR = (15, 155, 145)
+OLD_PLAN_COLOR = (221, 162, 67)
 HUMAN_COLORS = [
     (215, 137, 49),
     (170, 95, 177),
@@ -53,6 +57,9 @@ class ReplayViewer:
         self.scenario = replay["scenario"]
         self.metrics = replay["metrics"]
         self.frames = replay["frames"]
+        self.robot_plans = replay.get("robot_plans")
+        self.plan_ticks = [p["tick"] for p in self.robot_plans or []]
+        self.plan_rebuilder = None
         self.baseline = replay["baseline_frames"]
         self.rows = self.scenario["grid"]["rows"]
         self.specs = {a["id"]: a for a in [self.scenario["robot"], *self.scenario["pedestrians"]]}
@@ -66,14 +73,14 @@ class ReplayViewer:
         self.cell = min(
             43,
             (self.sidebar_x - 90) // len(self.rows[0]),
-            (self.height - 223 - self.content_offset) // len(self.rows),
+            (self.height - 300 - self.content_offset) // len(self.rows),
         )
         self.cell = max(1, self.cell)
         self.map_x = 44 + (self.sidebar_x - 76 - len(self.rows[0]) * self.cell) // 2
         self.map_y = (
-            124
+            154
             + self.content_offset
-            + (self.height - 240 - self.content_offset - len(self.rows) * self.cell) // 2
+            + (self.height - 300 - self.content_offset - len(self.rows) * self.cell) // 2
         )
         self.playhead = 0.0
         self.playing = True
@@ -81,6 +88,7 @@ class ReplayViewer:
         self.show_halos = True
         self.show_baseline = False
         self.show_path = True
+        self.show_plan = True
         self.buttons: dict[str, pygame.Rect] = {}
         self.fonts: dict[tuple[int, bool], pygame.font.Font] = {}
 
@@ -95,6 +103,7 @@ class ReplayViewer:
             "show_halos",
             "show_baseline",
             "show_path",
+            "show_plan",
             "playing",
             "fonts",
             "window_size",
@@ -215,6 +224,51 @@ class ReplayViewer:
             for ident, arrival in frame["arrivals"].items()
             if ident in self.colors and arrival <= at
         }
+
+    def current_plan(self) -> dict | None:
+        index = bisect_right(self.plan_ticks, self.playhead) - 1
+        frame = self.frames[min(int(self.playhead), len(self.frames) - 1)]
+        if index < 0 or self.robot_id not in frame["positions"]:
+            return None
+        return self.robot_plans[index]
+
+    def plan_changed(self, plan: dict) -> bool:
+        index = bisect_right(self.plan_ticks, plan["tick"]) - 1
+        if index <= 0:
+            return False
+        previous = self.robot_plans[index - 1]
+        expected = previous["path"][plan["tick"] - previous["tick"] :]
+        return plan["path"] != expected or plan["goal"] != previous["goal"]
+
+    def build_plans(self) -> None:
+        from .plan_replay import PlanRebuilder
+
+        try:
+            self.plan_rebuilder = PlanRebuilder(self.replay)
+            self.show_plan = True
+            self.notice = ""
+        except (ValueError, KeyError, TypeError) as exc:
+            self.notice = f"Could not rebuild routes: {exc}"
+            self.plan_rebuilder = None
+
+    def update_plan_rebuild(self) -> None:
+        if self.plan_rebuilder is None:
+            return
+        deadline = perf_counter() + 0.008
+        try:
+            while not self.plan_rebuilder.done and perf_counter() < deadline:
+                self.plan_rebuilder.step()
+            if self.plan_rebuilder.done:
+                self.robot_plans = self.plan_rebuilder.world.robot_plans
+                self.plan_ticks = [p["tick"] for p in self.robot_plans]
+                self.replay["robot_plans"] = self.robot_plans
+                if self.catalog is not None:
+                    path = self.catalog.entries[self.replay_index].path
+                    self.catalog.robot_plan_cache[path] = self.robot_plans
+                self.plan_rebuilder = None
+        except (ValueError, KeyError, TypeError) as exc:
+            self.notice = f"Could not rebuild routes: {exc}"
+            self.plan_rebuilder = None
 
     def _draw_arrived_humans(self, surface: pygame.Surface) -> None:
         by_cell = {}
@@ -396,6 +450,94 @@ class ReplayViewer:
     def initial_window_size(desktop_size: tuple[int, int]) -> tuple[int, int]:
         return (max(1, min(1100, desktop_size[0] - 80)), max(1, min(760, desktop_size[1] - 100)))
 
+    def _draw_plan_status(self, surface: pygame.Surface) -> None:
+        x, y = 38, 111 + self.content_offset
+        color = PLAN_COLOR
+        plan = self.current_plan()
+        if self.plan_rebuilder is not None:
+            label = (
+                f"Building planned routes: {self.plan_rebuilder.world.tick} / "
+                f"{len(self.frames) - 1} ticks"
+            )
+        elif self.robot_plans is None:
+            label = "Planned routes not recorded. Press R to build them."
+            color = MUTED
+        elif not self.show_plan:
+            label = "Planned route hidden  /  R to show"
+            color = MUTED
+        elif plan is None:
+            frame = self.frames[min(int(self.playhead), len(self.frames) - 1)]
+            label = (
+                "Robot reached its goal"
+                if self.robot_id in frame["arrivals"]
+                else "Waiting for first plan"
+            )
+        else:
+            label = f"Plan #{plan['sequence']}  /  Recalculated at tick {plan['tick']}"
+            if plan["status"] in {"no path", "budget"}:
+                label += "  /  " + (
+                    "No route found" if plan["status"] == "no path" else "Search limit"
+                )
+                color = OLD_PLAN_COLOR
+            elif plan.get("proposed") != plan.get("executed"):
+                label += "  /  Move blocked"
+                color = OLD_PLAN_COLOR
+            elif self.plan_changed(plan):
+                label += "  /  Route changed"
+            elif len(plan["path"]) > 1 and plan["path"][0] == plan["path"][1]:
+                label += "  /  Waiting"
+        pygame.draw.circle(surface, color, (x + 5, y + 11), 5)
+        self.text(
+            surface, self.fit_text(label, self.sidebar_x - 94, 13), (x + 19, y + 1), 13, color, True
+        )
+
+    def _draw_planned_route(self, surface: pygame.Surface) -> None:
+        plan = self.current_plan()
+        if not self.show_plan or plan is None:
+            return
+        offset = int(self.playhead) - plan["tick"]
+        position = self.interpolated(self.frames, self.playhead).get(self.robot_id)
+        if position is None:
+            return
+        fade = max(0.0, 1 - (self.playhead - plan["tick"]) / 0.65)
+        if fade > 0 and self.plan_changed(plan):
+            index = bisect_right(self.plan_ticks, plan["tick"]) - 1
+            previous = self.robot_plans[index - 1]
+            previous_path = previous["path"][int(self.playhead) - previous["tick"] :]
+            for a, b in zip(previous_path, previous_path[1:]):
+                if a != b:
+                    start, end = pygame.Vector2(self.center(a)), pygame.Vector2(self.center(b))
+                    for fraction in (0, 0.5):
+                        pygame.draw.line(
+                            surface,
+                            OLD_PLAN_COLOR,
+                            start.lerp(end, fraction),
+                            start.lerp(end, fraction + 0.25),
+                            2,
+                        )
+        points = [self.center(position)] + [self.center(p) for p in plan["path"][offset + 1 :]]
+        if len(points) > 1:
+            pygame.draw.lines(surface, PLAN_COLOR, False, points, max(2, self.cell // 10))
+        for a, b in zip(points, points[1:]):
+            if a == b:
+                pygame.draw.circle(surface, PLAN_COLOR, a, max(3, self.cell // 5), 2)
+                continue
+            start, end = pygame.Vector2(a), pygame.Vector2(b)
+            direction = (end - start).normalize()
+            tip = start.lerp(end, 0.72)
+            wing = pygame.Vector2(-direction.y, direction.x) * max(2, self.cell * 0.09)
+            back = tip - direction * max(4, self.cell * 0.17)
+            pygame.draw.polygon(surface, PLAN_COLOR, [tip, back + wing, back - wing])
+        # Highlight each planning event, including recalculations that retain the route.
+        if fade > 0:
+            pygame.draw.circle(
+                surface,
+                PLAN_COLOR,
+                self.center(position),
+                max(5, round(self.cell * (0.38 + 0.2 * (1 - fade)))),
+                2,
+            )
+
     def _draw_map(self, surface: pygame.Surface) -> None:
         card = pygame.Rect(
             22,
@@ -443,6 +585,9 @@ class ReplayViewer:
                 points.append(self.center(self.scenario["robot"]["goals"][-1]))
             if len(points) > 1:
                 pygame.draw.lines(surface, (178, 200, 248), False, points, 3)
+
+        self._draw_planned_route(surface)
+        self._draw_plan_status(surface)
 
         if self.show_baseline:
             for p in self.interpolated(self.baseline, self.playhead).values():
@@ -563,6 +708,13 @@ class ReplayViewer:
             (x + 18, 598 + offset, 258, 30),
             self.show_path,
         )
+        self.button(
+            surface,
+            "plan",
+            "R  Build planned routes" if self.robot_plans is None else "R  Planned robot route",
+            (x + 18, 636 + offset, 258, 30),
+            self.show_plan and self.robot_plans is not None,
+        )
 
     def draw(self, surface: pygame.Surface) -> None:
         surface.fill(BACKGROUND)
@@ -644,7 +796,8 @@ class ReplayViewer:
         )
         self.text(
             surface,
-            "Playback speed changes animation only. Metrics use simulation ticks.",
+            "Playback speed changes animation only. Green: current plan. "
+            "Dashed amber: replaced plan. Pale blue: executed route.",
             (29, self.height - 27),
             12,
             MUTED,
@@ -712,6 +865,12 @@ class ReplayViewer:
             self.show_baseline = not self.show_baseline
         elif action == "path":
             self.show_path = not self.show_path
+        elif action == "plan":
+            if self.robot_plans is None:
+                if self.plan_rebuilder is None:
+                    self.build_plans()
+            else:
+                self.show_plan = not self.show_plan
 
     def run(self) -> None:
         pygame.display.init()
@@ -731,6 +890,7 @@ class ReplayViewer:
             pygame.K_h: "halos",
             pygame.K_b: "baseline",
             pygame.K_p: "path",
+            pygame.K_r: "plan",
             pygame.K_PAGEUP: "previous_replay",
             pygame.K_PAGEDOWN: "next_replay",
         }
@@ -795,9 +955,10 @@ class ReplayViewer:
                         self.explorer.drag = None
                     self.window_size = (max(1, event.w), max(1, event.h))
                     pygame.display.set_mode(self.window_size, pygame.RESIZABLE)
+            self.update_plan_rebuild()
             if self.show_results:
                 self.explorer.camera.update(seconds)
-            elif self.playing and self.dropdown is None:
+            elif self.playing and self.dropdown is None and self.plan_rebuilder is None:
                 step_duration = self.scenario["settings"]["seconds_per_step"]
                 self.playhead = min(
                     self.last_tick, self.playhead + seconds * self.speed / step_duration

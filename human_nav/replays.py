@@ -44,6 +44,7 @@ class ReplayCatalog:
     def __init__(self, root: Path, entries: list[ReplayEntry], is_batch: bool) -> None:
         self.root = root
         self.is_batch = is_batch
+        self.robot_plan_cache: dict[Path, list[dict]] = {}
         map_order = {key: i for i, key in enumerate(dict.fromkeys(e.map_key for e in entries))}
         self.entries = tuple(
             sorted(
@@ -112,7 +113,10 @@ class ReplayCatalog:
 
     def load(self, index: int) -> dict:
         entry = self.entries[index]
-        return validate_replay(read_json(entry.path), str(entry.path))
+        replay = validate_replay(read_json(entry.path), str(entry.path))
+        if "robot_plans" not in replay and entry.path in self.robot_plan_cache:
+            replay["robot_plans"] = self.robot_plan_cache[entry.path]
+        return replay
 
     def options(self, dimension: str, index: int) -> list[tuple[str, str]]:
         current = self.entries[index]

@@ -71,14 +71,33 @@ layout. Switching replays or opening another batch preserves the window size.
 | Personal-space halos | H |
 | No-robot baseline ghosts | B |
 | Full executed robot route | P |
+| Current planned robot route / build it for older replays | R |
 | Switch batch replay | Page Up / Page Down or replay buttons |
 | Close an open selector | Escape / click outside |
 | Close | Escape |
 
 Blue squares are robots; colored numbered circles are pedestrians. S and G mark
 the robot's start and final goal. The sidebar shows **final-run metrics**, not
-partial metrics at the current playback position. The optional route overlay
-shows the robot's actual recorded route, not its prediction.
+partial metrics at the current playback position.
+
+The **green route** shows the robot's current A* plan, with arrows indicating
+direction and circles marking planned waits. It updates at every eligible
+planning timestep. The robot briefly flashes a ring at each recalculation, and
+the map header shows the plan number, decision tick, route changes, and blocked
+moves. A replaced route briefly appears as **dashed amber**. The separate **P**
+overlay shows the full actual recorded route in pale blue. **R** toggles the
+planned route. Pause, step, rewind, and speed controls work with both overlays.
+
+New recordings save the actual per-step decisions in `robot_plans`, including
+planned positions, goal, search outcome, proposed move, and executed move.
+Displaying a recording does not rerun its planner. For older recordings, click
+**R Build planned routes** to reconstruct just the selected replay. The viewer
+uses its recorded scenario snapshot, verifies every movement against the saved
+timeline, and caches the recovered plans in memory. It does not edit replay
+files or read current YAML defaults. Playback waits while reconstruction runs;
+the interface remains responsive. If the current simulation cannot reproduce
+the recorded movements, the viewer reports that mismatch and leaves the original
+recording intact.
 
 ## Install elsewhere
 
@@ -461,6 +480,7 @@ disappear from the next frame:
 | `results_gui.py` | Interactive results cube, animated camera, and awareness slices |
 | `gui.py` | pygame-ce interpolation and playback controls |
 | `replays.py` | Lazy batch index and map/behavior/robot selection |
+| `plan_replay.py` | Verified reconstruction of plans for older recordings |
 | `cli.py` | Run, replay, validate, batch, snapshot commands |
 
 The engine and headless experiments do not import pygame. Rendering is a
